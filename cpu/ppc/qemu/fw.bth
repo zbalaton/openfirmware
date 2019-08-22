@@ -1,0 +1,129 @@
+purpose: OFW build file for QEMU
+\ See license at end of file
+
+dictionary: ${BP}/cpu/ppc/qemu/build/ppcfw.dic
+command: &ppcforth &dictionary &this
+build-now
+
+hex
+warning on
+
+h#   4.0000 constant initial-heap-size
+
+true to stand-init-debug?
+true to probemsg?
+
+\ Enable diagnostic serial console for early debug
+fload ${BP}/dev/isa/diaguart.fth	\ Diagnostic driver for serial port
+
+\ h# 3f8 is uart-base			\ COM1 on PR*P or PC
+h# 2f8 is uart-base			\ Pegasos2
+
+fload ${BP}/forth/lib/sysuart.fth	\ Plug UART routines into key and emit
+' ukey is diag-key			\ Feed UART input to "dl"
+
+: ?report drop ;
+: fw-title ( -- )
+   ." Open Firmware"
+   " build-date"  $find  if  ." , built  " execute type  else  2drop  then  cr
+   ?spaces ." Copyright (c) 1995-2000, FirmWorks." cr
+   ?spaces ." Copyright (c) 2014,2017,2019 Artyom Tarasenko." cr
+;
+' fw-title to .firmware
+
+: .r3 ;
+
+fload ${BP}/cpu/ppc/ppcboot.fth 	\ Forth startup code
+
+fload ${BP}/cpu/ppc/qemu/fdt.fth
+h# 200000 to fdt-start
+: stand-init-io
+  stand-init-io
+  ." Init device tree from FDT" cr
+  fdt-doit
+  \ Should look at model property of / here and load appropriate driver
+  \ but we only have one yet
+  ." Loading Pegasos2 driver" cr
+  " pegasos2" $load-driver 0= if
+    ." Failed to load driver" cr
+  then
+;
+
+\ FIXME this should be in the driver drop-in but it does not work in fc
+fload ${BP}/cpu/ppc/qemu/pegasos2.fth
+
+fload ${BP}/dev/pciprobe.fth
+
+: (probe-all)
+  " probe-" do-drop-in
+  probe-pci
+  " probe+" do-drop-in
+;
+' (probe-all) to probe-all
+
+stand-init:  Keyboard overrides
+   ?bailout
+;
+
+\ Scrub memory and add it to the available list.
+\ fload ${BP}/cpu/ppc/prep/qemu/probemem.fth	\ Memory probing
+
+fload ${BP}/cpu/x86/pc/nullnv.fth  \ NVRAM
+
+\ support-package: ufs-file-system
+\    fload ${BP}/ofw/fs/ufs/ufs.fth               \ Unix file system
+\ end-support-package
+
+fload ${BP}/forth/lib/crc32.fth
+\needs unix-seconds>  fload ${BP}/ofw/fs/unixtime.fth   \ Unix time calculation
+\needs ($crc16)       fload ${BP}/forth/lib/crc16.fth
+support-package: ext2-file-system
+    fload ${BP}/ofw/fs/ext2fs/ext2fs.fth \ Linux file system
+end-support-package
+
+0 0  " fff00000"  " /" begin-package
+  " rom" device-name
+  h# 10.0000 dup constant /device constant /device-phys
+  my-address my-space /device reg
+  fload ${BP}/dev/flashpkg.fth
+end-package
+
+devalias dropins /rom
+\ Create a pseudo-device that presents the dropin modules as a filesystem.
+fload ${BP}/ofw/fs/dropinfs.fth
+
+\ XXX should check QEMU -nographic option
+\ for now, comment out the two following lines for graphic boot
+" /pci/isa/serial@i2f8"  ' output-device  set-config-string-default
+" /pci/isa/serial@i2f8"  ' input-device   set-config-string-default
+
+
+install-rom-cold
+
+.( --- Saving fw.dic ---)  " fw.dic" $save-forth  cr
+
+\ LICENSE_BEGIN
+\ Copyright (c) 1997 FirmWorks
+\ Copyright (c) 2014 Artyom Tarasenko
+\
+\ Permission is hereby granted, free of charge, to any person obtaining
+\ a copy of this software and associated documentation files (the
+\ "Software"), to deal in the Software without restriction, including
+\ without limitation the rights to use, copy, modify, merge, publish,
+\ distribute, sublicense, and/or sell copies of the Software, and to
+\ permit persons to whom the Software is furnished to do so, subject to
+\ the following conditions:
+\
+\ The above copyright notice and this permission notice shall be
+\ included in all copies or substantial portions of the Software.
+\
+\ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+\ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+\ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+\ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+\ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+\ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+\ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+\
+\ LICENSE_END
+

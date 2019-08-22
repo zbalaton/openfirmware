@@ -1,0 +1,73 @@
+purpose: Low-level startup code for QEMU
+\ See license at end of file
+
+dictionary: ${BP}/cpu/ppc/build/basefw.dic
+command: &ppcforth &dictionary &this
+
+build-now
+
+h# 0018.0000 constant RAMsize		\ Firmware size
+
+\needs start-assembling  fload ${BP}/cpu/ppc/asmtools.fth
+\needs write-dropin      fload ${BP}/forth/lib/mkdropin.fth
+
+assembler
+' be-l@ is asm@
+' be-l! is asm!
+forth
+
+start-assembling
+
+label my-entry
+   0 ,				\ To be patched later
+end-code
+
+label start-system
+   mfspr   r31,lr
+
+\ XXX Read value from NVRAM when QEMU's NVRAM layout is settled
+\ or read in from the Falcon registers when it's emulated.
+
+   set r5,h#8000000 \ 128 MiB
+   stw  r5,0(r0)                \ Store here for ppcboot.fth
+
+   RAMsize  set r4,*            \ Space Firmware gets
+   subf   r3,r4,r5              \ Memory base address
+
+   mtspr  lr,r31		\ Restore return address
+   bclr   20,0			\ ET go home...
+end-code
+
+start-system  my-entry  put-branch
+
+end-assembling
+
+writing start.di
+asm-base  here over -  0  " start" write-dropin
+ofd @ fclose
+
+\ LICENSE_BEGIN
+\ Copyright (c) 1997 FirmWorks
+\ Copyright (c) 2014 Artyom Tarasenko
+\
+\ Permission is hereby granted, free of charge, to any person obtaining
+\ a copy of this software and associated documentation files (the
+\ "Software"), to deal in the Software without restriction, including
+\ without limitation the rights to use, copy, modify, merge, publish,
+\ distribute, sublicense, and/or sell copies of the Software, and to
+\ permit persons to whom the Software is furnished to do so, subject to
+\ the following conditions:
+\
+\ The above copyright notice and this permission notice shall be
+\ included in all copies or substantial portions of the Software.
+\
+\ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+\ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+\ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+\ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+\ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+\ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+\ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+\
+\ LICENSE_END
+
